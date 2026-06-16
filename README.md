@@ -14,6 +14,9 @@ The dashboard enables real-time search, categorization filtering, and one-click 
 * 🏷️ **Type Filters**: Filter release notes using color-coded category badges (Features, Issues, Deprecations, Changes, General).
 * 🐦 **Interactive Tweet Composer**: Click any card to load, preview, edit, and post a pre-formatted draft to X (Twitter) within the 280-character limit.
 * 🎨 **Premium Glassmorphic UI**: Sleek dark-mode dashboard with hover effects, smooth transitions, skeleton loading, and an SVG character count progress ring.
+* 📋 **Copy to Clipboard**: Quick "Copy" button on each card to copy text summaries without triggering item selection.
+* 📊 **Export to CSV**: Download the currently active/filtered list of release notes as a CSV file.
+* 🌗 **Theme Switcher**: Smooth Light/Dark mode toggle switch that overrides CSS root variables.
 
 ---
 
