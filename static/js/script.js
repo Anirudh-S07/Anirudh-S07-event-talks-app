@@ -38,6 +38,8 @@ const elements = {
     progressIndicator: document.getElementById('progress-indicator'),
     tweetSubmitBtn: document.getElementById('tweet-submit-btn'),
     btnClearSelection: document.getElementById('btn-clear-selection'),
+    themeToggleBtn: document.getElementById('theme-toggle-btn'),
+    exportCsvBtn: document.getElementById('export-csv-btn'),
     
     // Toast
     toast: document.getElementById('toast'),
@@ -46,9 +48,26 @@ const elements = {
 
 // Initialize the Application
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
     fetchReleaseNotes();
     setupEventListeners();
 });
+
+// Setup Theme based on local storage
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+    }
+}
+
+// Toggle Theme Handler
+function toggleTheme() {
+    document.body.classList.toggle('light-theme');
+    const isLight = document.body.classList.contains('light-theme');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    showToast(`${isLight ? 'Light' : 'Dark'} mode enabled!`);
+}
 
 // Setup Event Listeners
 function setupEventListeners() {
@@ -89,6 +108,16 @@ function setupEventListeners() {
     
     // Clear Selection Button
     elements.btnClearSelection.addEventListener('click', clearSelection);
+
+    // Theme Toggle Click
+    if (elements.themeToggleBtn) {
+        elements.themeToggleBtn.addEventListener('click', toggleTheme);
+    }
+
+    // Export CSV Click
+    if (elements.exportCsvBtn) {
+        elements.exportCsvBtn.addEventListener('click', exportToCSV);
+    }
 }
 
 // Fetch Release Notes from Flask API
@@ -264,12 +293,36 @@ function renderNotes() {
             <div class="card-header-meta">
                 <span class="type-badge ${typeClass}">${note.type}</span>
                 <span class="card-date">${note.date}</span>
+                <button class="card-copy-btn" title="Copy update text" aria-label="Copy release note text">
+                    <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <svg class="copied-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </button>
             </div>
             <div class="card-body">
                 ${note.html}
             </div>
         `;
         
+        // Copy Button Click listener (stops propagation so card is not selected)
+        const copyBtn = card.querySelector('.card-copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                copyToClipboard(note.text, copyBtn);
+            });
+            // Stop keyboard activation from selecting card
+            copyBtn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                }
+            });
+        }
+
         // Add click listener
         card.addEventListener('click', () => toggleSelectNote(note));
         
@@ -451,4 +504,129 @@ function showToast(message, isError = false) {
     toastTimeout = setTimeout(() => {
         elements.toast.classList.remove('show');
     }, 3000);
+}
+
+// Copy update text to clipboard
+function copyToClipboard(text, buttonEl) {
+    if (!navigator.clipboard) {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showCopySuccess(buttonEl);
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+            showToast('Failed to copy to clipboard', true);
+        }
+        document.body.removeChild(textarea);
+        return;
+    }
+
+    navigator.clipboard.writeText(text).then(() => {
+        showCopySuccess(buttonEl);
+    }).catch(err => {
+        console.error('Clipboard API copy failed', err);
+        showToast('Failed to copy to clipboard', true);
+    });
+}
+
+function showCopySuccess(buttonEl) {
+    const copyIcon = buttonEl.querySelector('.copy-icon');
+    const copiedIcon = buttonEl.querySelector('.copied-icon');
+    
+    if (copyIcon && copiedIcon) {
+        copyIcon.style.display = 'none';
+        copiedIcon.style.display = 'block';
+        buttonEl.classList.add('copied');
+        
+        setTimeout(() => {
+            copyIcon.style.display = 'block';
+            copiedIcon.style.display = 'none';
+            buttonEl.classList.remove('copied');
+        }, 1500);
+    }
+    showToast('Copied to clipboard!');
+}
+
+// Export current filtered list of release notes to CSV
+function exportToCSV() {
+    // Filter the state.notes array using the same logic as renderNotes
+    const filteredNotes = state.notes.filter(note => {
+        // 1. Type Filter
+        let matchesType = false;
+        const noteType = note.type.toLowerCase();
+        
+        if (state.activeFilter === 'all') {
+            matchesType = true;
+        } else if (state.activeFilter === 'feature' && noteType.includes('feature')) {
+            matchesType = true;
+        } else if (state.activeFilter === 'issue' && noteType.includes('issue')) {
+            matchesType = true;
+        } else if (state.activeFilter === 'deprecation' && noteType.includes('deprecation')) {
+            matchesType = true;
+        } else if (state.activeFilter === 'changed' && (noteType.includes('change') || noteType.includes('changed'))) {
+            matchesType = true;
+        } else if (state.activeFilter === 'general' && 
+                   !noteType.includes('feature') && 
+                   !noteType.includes('issue') && 
+                   !noteType.includes('deprecation') && 
+                   !noteType.includes('change') && 
+                   !noteType.includes('changed')) {
+            matchesType = true;
+        }
+        
+        // 2. Search Query
+        const searchStr = state.searchQuery.trim();
+        const matchesSearch = !searchStr || 
+            note.text.toLowerCase().includes(searchStr) || 
+            note.type.toLowerCase().includes(searchStr) || 
+            note.date.toLowerCase().includes(searchStr);
+            
+        return matchesType && matchesSearch;
+    });
+
+    if (filteredNotes.length === 0) {
+        showToast('No notes available to export.', true);
+        return;
+    }
+
+    // CSV Formatting
+    const headers = ['Date', 'Type', 'Link', 'Update Text'];
+    
+    const rows = filteredNotes.map(note => {
+        return [
+            note.date,
+            note.type,
+            note.link,
+            note.text
+        ].map(val => {
+            // Escape double quotes and wrap in double quotes
+            const cleanVal = (val || '').replace(/"/g, '""');
+            return `"${cleanVal}"`;
+        }).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    const categoryName = state.activeFilter.charAt(0).toUpperCase() + state.activeFilter.slice(1);
+    const filename = `bigquery_release_notes_${categoryName.toLowerCase()}_${new Date().toISOString().slice(0,10)}.csv`;
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Exported ${filteredNotes.length} notes to CSV!`);
 }
